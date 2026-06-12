@@ -168,6 +168,22 @@
   .alert-amber{background:var(--amber-bg);color:var(--amber-text);}
   .alert-green{background:var(--accent-bg);color:var(--accent-text);}
   .alert-red{background:var(--danger-bg);color:var(--danger-text);}
+
+  /* ── AUTOCOMPLETE ────────────────────────────────────── */
+  .autocomplete-wrap{position:relative;}
+  .autocomplete-list{
+    position:absolute; top:100%; left:0; right:0; z-index:50;
+    background:var(--surface); border:1px solid var(--border2);
+    border-radius:var(--radius-sm); margin-top:2px;
+    max-height:220px; overflow-y:auto; display:none;
+    box-shadow:0 4px 16px rgba(0,0,0,0.12);
+  }
+  .autocomplete-list.show{display:block;}
+  .ac-item{padding:8px 12px; cursor:pointer; font-size:13px; border-bottom:1px solid var(--border);}
+  .ac-item:last-child{border-bottom:none;}
+  .ac-item:hover{background:var(--surface2);}
+  .ac-item .ac-fantasia{font-weight:600; color:var(--text);}
+  .ac-item .ac-detail{font-size:11px; color:var(--text2); margin-top:1px;}
 </style>
 </head>
 <body>
@@ -206,7 +222,22 @@
     <div class="step-title">✏️ Editar Registro</div>
     <input type="hidden" id="edit-id" />
     <div class="form-row"><label>Data</label><input type="date" id="edit-data" /></div>
-    <div class="form-row"><label>Cliente</label><input type="text" id="edit-cliente" /></div>
+
+    <div class="form-row autocomplete-wrap">
+      <label>Nome Fantasia</label>
+      <input type="text" id="edit-fantasia" placeholder="Ex: Mercado do João" autocomplete="off" oninput="onClienteInput('edit')" onfocus="onClienteInput('edit')" />
+      <div class="autocomplete-list" id="ac-edit"></div>
+    </div>
+    <div class="form-grid-2">
+      <div class="form-row autocomplete-wrap">
+        <label>Razão Social</label>
+        <input type="text" id="edit-razao" placeholder="Ex: João Silva Materiais Ltda" autocomplete="off" oninput="onClienteInput('edit')" onfocus="onClienteInput('edit')" />
+      </div>
+      <div class="form-row autocomplete-wrap">
+        <label>CNPJ</label>
+        <input type="text" id="edit-cnpj" placeholder="00.000.000/0000-00" autocomplete="off" oninput="onClienteInput('edit')" onfocus="onClienteInput('edit')" />
+      </div>
+    </div>
     <div class="form-row"><label>Observações</label><textarea id="edit-obs" rows="2"></textarea></div>
     <div class="divider"></div>
     <label class="venda-toggle">
@@ -335,7 +366,22 @@
     <div class="card" id="card-form-registro">
       <div class="card-title">Nova Ligação</div>
       <div class="form-row"><label>Data</label><input type="date" id="input-data" /></div>
-      <div class="form-row"><label>Nome do cliente</label><input type="text" id="input-cliente" placeholder="Ex: João Silva Materiais Ltda" autocomplete="off" /></div>
+
+      <div class="form-row autocomplete-wrap">
+        <label>Nome Fantasia</label>
+        <input type="text" id="input-fantasia" placeholder="Ex: Mercado do João" autocomplete="off" oninput="onClienteInput('input')" onfocus="onClienteInput('input')" />
+        <div class="autocomplete-list" id="ac-input"></div>
+      </div>
+      <div class="form-grid-2">
+        <div class="form-row autocomplete-wrap">
+          <label>Razão Social</label>
+          <input type="text" id="input-razao" placeholder="Ex: João Silva Materiais Ltda" autocomplete="off" oninput="onClienteInput('input')" onfocus="onClienteInput('input')" />
+        </div>
+        <div class="form-row autocomplete-wrap">
+          <label>CNPJ</label>
+          <input type="text" id="input-cnpj" placeholder="00.000.000/0000-00" autocomplete="off" oninput="onClienteInput('input')" onfocus="onClienteInput('input')" />
+        </div>
+      </div>
       <div class="form-row"><label>Observações (opcional)</label><textarea id="input-obs" rows="2" placeholder="Retornar, sem interesse, pediu catálogo..."></textarea></div>
       <div class="divider"></div>
       <label class="venda-toggle">
@@ -364,7 +410,7 @@
     <div class="filter-row">
       <input type="date" id="filtro-data-de" />
       <input type="date" id="filtro-data-ate" />
-      <input type="text" id="filtro-cliente" placeholder="Buscar cliente..." oninput="renderHistorico()" />
+      <input type="text" id="filtro-cliente" placeholder="Buscar por nome fantasia, razão social ou CNPJ..." oninput="renderHistorico()" />
     </div>
     <div style="display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap;">
       <button class="btn btn-secondary btn-sm" onclick="setFiltroModo('todos')">Todos</button>
@@ -456,8 +502,29 @@ function setConn(s){
   el.className=''; el.classList.add(m[s][0]); el.textContent=m[s][1];
 }
 
+// Retorna o nome de exibição do cliente, compatível com registros antigos (string)
+function nomeCliente(cliente) {
+  if(!cliente) return '—';
+  if(typeof cliente === 'string') return cliente; // registros antigos
+  return cliente.fantasia || cliente.razao || cliente.cnpj || '—';
+}
+// Retorna detalhe secundário (razão social / CNPJ) para exibir junto ao nome
+function detalheCliente(cliente) {
+  if(!cliente || typeof cliente === 'string') return '';
+  const partes=[];
+  if(cliente.fantasia && cliente.razao && cliente.razao!==cliente.fantasia) partes.push(cliente.razao);
+  if(cliente.cnpj) partes.push(cliente.cnpj);
+  return partes.join(' · ');
+}
+// Texto de busca combinando todos os campos do cliente
+function textoBuscaCliente(cliente) {
+  if(!cliente) return '';
+  if(typeof cliente === 'string') return cliente.toLowerCase();
+  return [cliente.fantasia,cliente.razao,cliente.cnpj].filter(Boolean).join(' ').toLowerCase();
+}
+
 // ── ESTADO ────────────────────────────────────────────────────
-let db=null, allRegistros=[], allUsuarios=[];
+let db=null, allRegistros=[], allUsuarios=[], allClientes=[];
 let usuarioAtual=null; // { nome, perms:{escrever,excluir,relatorios,admin} }
 let filtroModo='todos', filtroVendedorAtivo=false;
 
@@ -503,6 +570,11 @@ function iniciarListener() {
       atualizarSelectVendedores();
     },
     err=>{ console.error(err); setConn('err'); }
+  );
+  const qc=query(collection(db,'clientes'),orderBy('nomeFantasiaLower'));
+  onSnapshot(qc,
+    snap=>{ allClientes=snap.docs.map(d=>({_id:d.id,...d.data()})); },
+    err=>{ console.error(err); }
   );
 }
 
@@ -688,18 +760,112 @@ function initForms() {
   document.getElementById('filtro-data-ate').addEventListener('change',renderHistorico);
 }
 
-// ── SALVAR REGISTRO ───────────────────────────────────────────
+// ── CLIENTES (AUTOCOMPLETE) ────────────────────────────────────
+// Verifica se o cliente já existe (por CNPJ ou por nome) e cria se for novo
+async function salvarClienteSeNovo(cliente) {
+  const cnpjNorm = (cliente.cnpj||'').replace(/\D/g,'');
+  const fantasiaLower = (cliente.fantasia||'').trim().toLowerCase();
+  const razaoLower    = (cliente.razao||'').trim().toLowerCase();
+
+  const existente = allClientes.find(c=>{
+    if(cnpjNorm && (c.cnpj||'').replace(/\D/g,'')===cnpjNorm) return true;
+    if(!cnpjNorm){
+      if(fantasiaLower && (c.fantasia||'').trim().toLowerCase()===fantasiaLower) return true;
+      if(razaoLower && (c.razao||'').trim().toLowerCase()===razaoLower) return true;
+    }
+    return false;
+  });
+
+  if(existente) {
+    // Atualiza dados caso novos campos tenham sido preenchidos
+    const updates={};
+    if(cliente.fantasia && !existente.fantasia) updates.fantasia=cliente.fantasia;
+    if(cliente.razao && !existente.razao) updates.razao=cliente.razao;
+    if(cliente.cnpj && !existente.cnpj) updates.cnpj=cliente.cnpj;
+    if(Object.keys(updates).length){
+      if(updates.fantasia) updates.nomeFantasiaLower=updates.fantasia.toLowerCase();
+      try { await updateDoc(doc(db,'clientes',existente._id),updates); } catch{}
+    }
+    return existente._id;
+  }
+  // Novo cliente
+  try {
+    const novo={
+      fantasia:cliente.fantasia||'', razao:cliente.razao||'', cnpj:cliente.cnpj||'',
+      nomeFantasiaLower:(cliente.fantasia||cliente.razao||cliente.cnpj||'').toLowerCase(),
+      criadoEm:serverTimestamp()
+    };
+    const ref=await addDoc(collection(db,'clientes'),novo);
+    allClientes.push({_id:ref.id,...novo});
+    return ref.id;
+  } catch(e){ console.error('Erro ao salvar cliente',e); return null; }
+}
+
+// Filtra clientes que combinam com o texto digitado
+function buscarClientes(texto) {
+  const t=texto.trim().toLowerCase();
+  if(!t) return [];
+  const tNum=t.replace(/\D/g,'');
+  return allClientes.filter(c=>{
+    const f=(c.fantasia||'').toLowerCase();
+    const r=(c.razao||'').toLowerCase();
+    const cn=(c.cnpj||'').replace(/\D/g,'');
+    return f.includes(t) || r.includes(t) || (tNum && cn.includes(tNum));
+  }).slice(0,8);
+}
+
+// Mostra/atualiza a lista de sugestões para o prefixo ('input' ou 'edit')
+window.onClienteInput = prefix => {
+  const fantasia=document.getElementById(prefix+'-fantasia').value;
+  const razao=document.getElementById(prefix+'-razao').value;
+  const cnpj=document.getElementById(prefix+'-cnpj').value;
+  const texto = document.activeElement===document.getElementById(prefix+'-cnpj') ? cnpj : (fantasia||razao);
+  const results=buscarClientes(texto);
+  const list=document.getElementById('ac-'+prefix);
+  if(!results.length){ list.classList.remove('show'); list.innerHTML=''; return; }
+  list.innerHTML=results.map(c=>{
+    const nome=c.fantasia||c.razao||c.cnpj||'—';
+    const detalhe=[c.razao&&c.razao!==c.fantasia?c.razao:null,c.cnpj].filter(Boolean).join(' · ');
+    return `<div class="ac-item" onmousedown="selecionarCliente('${prefix}','${c._id}')">
+      <div class="ac-fantasia">${nome}</div>
+      ${detalhe?`<div class="ac-detail">${detalhe}</div>`:''}
+    </div>`;
+  }).join('');
+  list.classList.add('show');
+};
+
+window.selecionarCliente = (prefix, id) => {
+  const c=allClientes.find(x=>x._id===id);
+  if(!c) return;
+  document.getElementById(prefix+'-fantasia').value=c.fantasia||'';
+  document.getElementById(prefix+'-razao').value=c.razao||'';
+  document.getElementById(prefix+'-cnpj').value=c.cnpj||'';
+  document.getElementById('ac-'+prefix).classList.remove('show');
+};
+
+// Fecha listas de sugestões ao clicar fora
+document.addEventListener('click', e=>{
+  document.querySelectorAll('.autocomplete-list').forEach(list=>{
+    if(!list.parentElement.contains(e.target)) list.classList.remove('show');
+  });
+});
+
+
 window.salvarRegistro = async () => {
   if(!usuarioAtual?.perms?.escrever){ toast('Sem permissão para registrar.','erro'); return; }
   const data=document.getElementById('input-data').value;
-  const cliente=document.getElementById('input-cliente').value.trim();
+  const fantasia=document.getElementById('input-fantasia').value.trim();
+  const razao=document.getElementById('input-razao').value.trim();
+  const cnpj=document.getElementById('input-cnpj').value.trim();
   const obs=document.getElementById('input-obs').value.trim();
   const temVenda=document.getElementById('check-venda').checked;
-  if(!data||!cliente){ toast('Preencha data e cliente.','erro'); return; }
+  if(!data){ toast('Informe a data.','erro'); return; }
+  if(!fantasia&&!razao&&!cnpj){ toast('Informe pelo menos um dado do cliente.','erro'); return; }
 
   const btn=document.getElementById('btn-salvar');
   btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Salvando...';
 
+  const cliente={fantasia,razao,cnpj};
   const reg={data,cliente,obs,venda:null,vendedor:usuarioAtual.nome,criadoEm:serverTimestamp()};
   if(temVenda){
     const valor=parseFloat(document.getElementById('input-valor').value);
@@ -707,8 +873,11 @@ window.salvarRegistro = async () => {
     reg.venda={valor, parcelas:document.getElementById('input-parcelas').value, filial:document.getElementById('input-filial').value};
   }
   try {
+    await salvarClienteSeNovo(cliente);
     await addDoc(collection(db,'registros'),reg);
-    document.getElementById('input-cliente').value='';
+    document.getElementById('input-fantasia').value='';
+    document.getElementById('input-razao').value='';
+    document.getElementById('input-cnpj').value='';
     document.getElementById('input-obs').value='';
     document.getElementById('input-valor').value='';
     document.getElementById('check-venda').checked=false;
@@ -761,7 +930,7 @@ function renderHistorico() {
   let regs=[...allRegistros];
   if(de) regs=regs.filter(r=>r.data>=de);
   if(ate) regs=regs.filter(r=>r.data<=ate);
-  if(busca) regs=regs.filter(r=>r.cliente.toLowerCase().includes(busca));
+  if(busca) regs=regs.filter(r=>textoBuscaCliente(r.cliente).includes(busca));
   if(filtroModo==='vendas') regs=regs.filter(r=>r.venda);
   if(filtroModo==='ligacoes') regs=regs.filter(r=>!r.venda);
   if(filtroVendedorAtivo) regs=regs.filter(r=>r.vendedor===usuarioAtual?.nome);
@@ -769,13 +938,16 @@ function renderHistorico() {
   const el=document.getElementById('historico-list');
   if(!regs.length){ el.innerHTML='<div class="empty">Nenhum registro encontrado.</div>'; return; }
 
-  el.innerHTML='<div class="records-list">'+regs.map(r=>`
+  el.innerHTML='<div class="records-list">'+regs.map(r=>{
+    const detalhe=detalheCliente(r.cliente);
+    return `
     <div class="record-item ${r.venda?'has-sale':''}">
       <div class="record-main">
-        <div class="record-client">${r.cliente}</div>
+        <div class="record-client">${nomeCliente(r.cliente)}</div>
         <div class="record-meta">
           ${fmtData(r.data)}
           ${r.vendedor?' · <strong>'+r.vendedor+'</strong>':''}
+          ${detalhe?' · '+detalhe:''}
           ${r.obs?' · '+r.obs:''}
         </div>
         ${r.venda?`<div style="margin-top:5px;display:flex;gap:6px;flex-wrap:wrap;">
@@ -788,7 +960,8 @@ function renderHistorico() {
         ${podeEditar(r)?`<button class="btn btn-secondary btn-sm" onclick="abrirEditar('${r._id}')">✏️</button>`:''}
         ${podeExcluir(r)?`<button class="btn btn-danger btn-sm" onclick="deletarRegistro('${r._id}')">✕</button>`:''}
       </div>
-    </div>`).join('')+'</div>';
+    </div>`;
+  }).join('')+'</div>';
 }
 
 window.deletarRegistro = async id => {
@@ -803,7 +976,16 @@ window.abrirEditar = id => {
   if(!r) return;
   document.getElementById('edit-id').value=id;
   document.getElementById('edit-data').value=r.data;
-  document.getElementById('edit-cliente').value=r.cliente;
+  if(typeof r.cliente === 'string') {
+    // registro antigo — coloca o texto no campo "Nome Fantasia"
+    document.getElementById('edit-fantasia').value=r.cliente||'';
+    document.getElementById('edit-razao').value='';
+    document.getElementById('edit-cnpj').value='';
+  } else {
+    document.getElementById('edit-fantasia').value=r.cliente?.fantasia||'';
+    document.getElementById('edit-razao').value=r.cliente?.razao||'';
+    document.getElementById('edit-cnpj').value=r.cliente?.cnpj||'';
+  }
   document.getElementById('edit-obs').value=r.obs||'';
   const temVenda=!!r.venda;
   document.getElementById('edit-check-venda').checked=temVenda;
@@ -821,17 +1003,22 @@ window.toggleEditVenda = cb => document.getElementById('edit-venda-fields').clas
 window.salvarEdicao = async () => {
   const id=document.getElementById('edit-id').value;
   const data=document.getElementById('edit-data').value;
-  const cliente=document.getElementById('edit-cliente').value.trim();
+  const fantasia=document.getElementById('edit-fantasia').value.trim();
+  const razao=document.getElementById('edit-razao').value.trim();
+  const cnpj=document.getElementById('edit-cnpj').value.trim();
   const obs=document.getElementById('edit-obs').value.trim();
   const temVenda=document.getElementById('edit-check-venda').checked;
-  if(!data||!cliente){ toast('Preencha data e cliente.','erro'); return; }
+  if(!data){ toast('Informe a data.','erro'); return; }
+  if(!fantasia&&!razao&&!cnpj){ toast('Informe pelo menos um dado do cliente.','erro'); return; }
   let venda=null;
   if(temVenda){
     const valor=parseFloat(document.getElementById('edit-valor').value);
     if(!valor||valor<=0){ toast('Informe o valor da venda.','erro'); return; }
     venda={valor, parcelas:document.getElementById('edit-parcelas').value, filial:document.getElementById('edit-filial').value};
   }
+  const cliente={fantasia,razao,cnpj};
   try {
+    await salvarClienteSeNovo(cliente);
     await updateDoc(doc(db,'registros',id),{data,cliente,obs,venda});
     fecharModal('modal-editar');
     toast('Registro atualizado!');
@@ -1008,7 +1195,7 @@ function renderRelatorios() {
     :[...vendas].sort((a,b)=>b.data.localeCompare(a.data)).map(r=>`<tr>
         <td>${fmtData(r.data)}</td>
         <td><span class="badge badge-gray">${r.vendedor||'—'}</span></td>
-        <td>${r.cliente}</td>
+        <td>${nomeCliente(r.cliente)}</td>
         <td style="font-weight:600;">${fmtMoeda(r.venda.valor)}</td>
         <td><span class="badge badge-amber">${r.venda.parcelas}</span></td>
         <td><span class="badge badge-blue">${r.venda.filial}</span></td>
