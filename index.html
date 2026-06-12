@@ -174,48 +174,28 @@
 
 <!-- ══ SETUP ═════════════════════════════════════════════════ -->
 <div class="overlay" id="setup-overlay">
-  <div class="modal-box">
+  <div class="modal-box" style="max-width:380px;">
     <div class="setup-logo">Televendas Pro</div>
-    <div class="setup-sub">Configure uma vez — funciona para toda a equipe</div>
-
-    <div class="setup-step active" id="step-firebase">
-      <div class="step-title">🔧 Passo 1 de 3 — Criar projeto Firebase</div>
-      <div class="step-hint">
-        <strong>Siga este passo a passo (≈5 minutos):</strong>
-        <ol>
-          <li>Acesse <strong>console.firebase.google.com</strong> com sua conta Google</li>
-          <li>Clique em <strong>"Adicionar projeto"</strong>, dê um nome e confirme</li>
-          <li>No menu lateral, clique em <strong>Firestore Database</strong> → <strong>"Criar banco de dados"</strong></li>
-          <li>Escolha <strong>Modo de teste</strong> → região <strong>southamerica-east1</strong> → Concluir</li>
-          <li>Em <strong>⚙ Configurações do projeto</strong>, role até <strong>"Seus aplicativos"</strong> → clique em <code>&lt;/&gt;</code></li>
-          <li>Registre o app e copie o bloco <code>firebaseConfig</code></li>
-        </ol>
-      </div>
-      <button class="btn btn-primary btn-full" onclick="goStep('step-config')">Já tenho o firebaseConfig →</button>
-    </div>
-
-    <div class="setup-step" id="step-config">
-      <div class="step-title">📋 Passo 2 de 3 — Cole sua configuração</div>
-      <div class="step-hint">Cole o objeto <code>firebaseConfig</code> copiado do Firebase Console.</div>
-      <div class="form-row">
-        <label>firebaseConfig</label>
-        <textarea id="input-fbconfig" rows="7" placeholder='{ "apiKey": "AIza...", "projectId": "...", ... }'></textarea>
-      </div>
-      <div style="display:flex;gap:8px;margin-top:8px;">
-        <button class="btn btn-secondary" onclick="goStep('step-firebase')" style="flex-shrink:0;">← Voltar</button>
-        <button class="btn btn-primary btn-full" onclick="salvarConfig()">Salvar e continuar →</button>
-      </div>
-    </div>
-
-    <div class="setup-step" id="step-login">
-      <div class="step-title">🔐 Passo 3 de 3 — Entrar no sistema</div>
-      <div class="step-hint" id="login-hint">Informe seu nome de usuário e senha para entrar.</div>
-      <div class="form-row"><label>Usuário</label><input type="text" id="login-usuario" placeholder="Seu nome de usuário" /></div>
-      <div class="form-row"><label>Senha</label><input type="password" id="login-senha" placeholder="Sua senha" /></div>
+    <div class="setup-sub">Informe seu usuário e senha para entrar</div>
+    <div class="setup-step active" id="step-login">
+      <div class="alert alert-amber" id="login-hint" style="display:none;"></div>
+      <div class="form-row"><label>Usuário</label><input type="text" id="login-usuario" placeholder="Seu nome de usuário" autocomplete="username" /></div>
+      <div class="form-row"><label>Senha</label><input type="password" id="login-senha" placeholder="Sua senha" autocomplete="current-password" /></div>
       <button class="btn btn-primary btn-full" onclick="fazerLogin()">Entrar →</button>
-      <div style="text-align:center;margin-top:12px;">
-        <button class="btn-link" onclick="goStep('step-config')">← Voltar</button>
-      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL ALTERAR SENHA ════════════════════════════════════ -->
+<div class="overlay hidden" id="modal-senha">
+  <div class="modal-box" style="max-width:360px;">
+    <div class="step-title">🔑 Alterar Senha</div>
+    <div class="form-row"><label>Senha atual</label><input type="password" id="senha-atual" placeholder="Sua senha atual" /></div>
+    <div class="form-row"><label>Nova senha</label><input type="password" id="senha-nova" placeholder="Mínimo 4 caracteres" /></div>
+    <div class="form-row"><label>Confirmar nova senha</label><input type="password" id="senha-confirmar" placeholder="Repita a nova senha" /></div>
+    <div style="display:flex;gap:8px;margin-top:1rem;">
+      <button class="btn btn-secondary btn-full" onclick="fecharModal('modal-senha')">Cancelar</button>
+      <button class="btn btn-primary btn-full" onclick="alterarSenha()">Salvar senha</button>
     </div>
   </div>
 </div>
@@ -329,6 +309,7 @@
     </nav>
     <div class="header-right">
       <span id="conn-status" class="load">● conectando</span>
+      <button class="btn btn-secondary btn-sm" id="btn-senha" onclick="abrirAlterarSenha()" style="display:none;" title="Alterar senha">🔑</button>
       <span class="vendedor-badge" id="badge-vendedor" onclick="confirmarSair()" title="Clique para sair"></span>
     </div>
   </div>
@@ -539,29 +520,36 @@ async function carregarUsuarios() {
 
 async function criarAdminPadrao() {
   const admin = {
-    nome:'admin',
-    senhaHash: hashSimples('admin123'),
-    perms:{ escrever:true, excluir:true, relatorios:true, admin:true },
-    criadoEm: serverTimestamp()
+    nome:'admin', senhaHash:hashSimples('admin123'),
+    perms:{escrever:true,excluir:true,relatorios:true,admin:true},
+    criadoEm:serverTimestamp()
   };
-  await setDoc(doc(db,'usuarios','admin'), admin);
+  await setDoc(doc(db,'usuarios','admin'),admin);
   allUsuarios=[{_id:'admin',...admin}];
-  document.getElementById('login-hint').innerHTML =
-    '<strong>Primeiro acesso detectado!</strong><br>Usuário padrão criado:<br>Usuário: <code>admin</code> / Senha: <code>admin123</code><br><span style="color:var(--amber-text)">Troque a senha depois de entrar.</span>';
+  const hint=document.getElementById('login-hint');
+  if(hint){
+    hint.style.display='';
+    hint.className='alert alert-green';
+    hint.innerHTML='<strong>Primeiro acesso!</strong> Usuário padrão criado:<br>Usuário: <code>admin</code> &nbsp;Senha: <code>admin123</code><br><small>Troque a senha após entrar.</small>';
+  }
 }
 
 window.fazerLogin = async () => {
-  if(!db){ toast('Firebase não conectado.','erro'); return; }
-  const nome=document.getElementById('login-usuario').value.trim();
+  if(!db){ toast('Aguarde a conexão com o servidor...','erro'); return; }
+  const nome =document.getElementById('login-usuario').value.trim();
   const senha=document.getElementById('login-senha').value;
   if(!nome||!senha){ toast('Preencha usuário e senha.','erro'); return; }
 
   await carregarUsuarios();
-  const user=allUsuarios.find(u=>u.nome.toLowerCase()===nome.toLowerCase() && u.senhaHash===hashSimples(senha));
-  if(!user){ toast('Usuário ou senha incorretos.','erro'); return; }
-
+  const user=allUsuarios.find(u=>u.nome.toLowerCase()===nome.toLowerCase()&&u.senhaHash===hashSimples(senha));
+  if(!user){
+    const hint=document.getElementById('login-hint');
+    hint.style.display='';
+    hint.textContent='Usuário ou senha incorretos.';
+    return;
+  }
   usuarioAtual={nome:user.nome, perms:user.perms||{}};
-  localStorage.setItem('tv_usuario', JSON.stringify({nome:user.nome, senhaHash:hashSimples(senha)}));
+  localStorage.setItem('tv_usuario',JSON.stringify({nome:user.nome,senhaHash:hashSimples(senha)}));
   document.getElementById('setup-overlay').classList.add('hidden');
   aplicarPermissoes();
   initForms();
@@ -571,14 +559,42 @@ window.fazerLogin = async () => {
 function aplicarPermissoes() {
   if(!usuarioAtual) return;
   document.getElementById('badge-vendedor').textContent = usuarioAtual.nome + ' ▾';
-  // Admin
   document.getElementById('nav-admin').style.display = usuarioAtual.perms.admin ? '' : 'none';
-  // Escrever
+  document.getElementById('btn-senha').style.display = '';
   document.getElementById('card-form-registro').style.display = usuarioAtual.perms.escrever ? '' : 'none';
   document.getElementById('sem-permissao-registro').style.display = usuarioAtual.perms.escrever ? 'none' : '';
-  // Relatórios
   document.getElementById('nav-relatorios').style.display = usuarioAtual.perms.relatorios ? '' : 'none';
 }
+
+window.abrirAlterarSenha = () => {
+  document.getElementById('senha-atual').value='';
+  document.getElementById('senha-nova').value='';
+  document.getElementById('senha-confirmar').value='';
+  document.getElementById('modal-senha').classList.remove('hidden');
+};
+
+window.alterarSenha = async () => {
+  const atual    = document.getElementById('senha-atual').value;
+  const nova     = document.getElementById('senha-nova').value;
+  const confirmar= document.getElementById('senha-confirmar').value;
+  if(!atual||!nova||!confirmar){ toast('Preencha todos os campos.','erro'); return; }
+  if(nova.length<4){ toast('Nova senha deve ter mínimo 4 caracteres.','erro'); return; }
+  if(nova!==confirmar){ toast('As senhas não coincidem.','erro'); return; }
+
+  // Verificar senha atual
+  const user=allUsuarios.find(u=>u.nome.toLowerCase()===usuarioAtual.nome.toLowerCase());
+  if(!user||user.senhaHash!==hashSimples(atual)){ toast('Senha atual incorreta.','erro'); return; }
+
+  try {
+    const novoHash=hashSimples(nova);
+    await updateDoc(doc(db,'usuarios',user._id),{senhaHash:novoHash});
+    // Atualizar cache local
+    localStorage.setItem('tv_usuario',JSON.stringify({nome:usuarioAtual.nome,senhaHash:novoHash}));
+    await carregarUsuarios();
+    fecharModal('modal-senha');
+    toast('Senha alterada com sucesso!');
+  } catch(e){ toast('Erro ao alterar senha.','erro'); }
+};
 
 window.confirmarSair = () => {
   if(confirm('Deseja sair do sistema?')) {
@@ -1018,33 +1034,36 @@ window.showTab=(id,btn)=>{
 };
 window.toggleVenda=cb=>document.getElementById('venda-fields').classList.toggle('visible',cb.checked);
 
-// ── BOOTSTRAP ─────────────────────────────────────────────────
-const cfgSalva=localStorage.getItem('tv_fbconfig');
-const usuarioSalvo=localStorage.getItem('tv_usuario');
+// ── CONFIG EMBUTIDA ───────────────────────────────────────────
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBWCFfiNiRjYv9kEUUcyfQ6e6nDdRL3pRI",
+  authDomain: "televendas-80f0f.firebaseapp.com",
+  projectId: "televendas-80f0f",
+  storageBucket: "televendas-80f0f.firebasestorage.app",
+  messagingSenderId: "693973436944",
+  appId: "1:693973436944:web:e8981e44cec8ed7cc99895",
+  measurementId: "G-0D2E7G0370"
+};
 
-if(cfgSalva) {
-  const cfg=JSON.parse(cfgSalva);
-  iniciarFirebase(cfg);
-  if(usuarioSalvo) {
-    // Re-login automático
-    setTimeout(async()=>{
-      const {nome, senhaHash}=JSON.parse(usuarioSalvo);
-      await carregarUsuarios();
-      const user=allUsuarios.find(u=>u.nome.toLowerCase()===nome.toLowerCase()&&u.senhaHash===senhaHash);
-      if(user){
-        usuarioAtual={nome:user.nome, perms:user.perms||{}};
-        document.getElementById('setup-overlay').classList.add('hidden');
-        aplicarPermissoes(); initForms();
-      } else {
-        localStorage.removeItem('tv_usuario');
-        goStep('step-login');
-      }
-    },1500);
-  } else {
-    goStep('step-login');
-  }
+// ── BOOTSTRAP ─────────────────────────────────────────────────
+iniciarFirebase(FIREBASE_CONFIG);
+const usuarioSalvo = localStorage.getItem('tv_usuario');
+if(usuarioSalvo) {
+  setTimeout(async()=>{
+    const {nome,senhaHash}=JSON.parse(usuarioSalvo);
+    await carregarUsuarios();
+    const user=allUsuarios.find(u=>u.nome.toLowerCase()===nome.toLowerCase()&&u.senhaHash===senhaHash);
+    if(user){
+      usuarioAtual={nome:user.nome,perms:user.perms||{}};
+      document.getElementById('setup-overlay').classList.add('hidden');
+      aplicarPermissoes(); initForms();
+    } else {
+      localStorage.removeItem('tv_usuario');
+      goStep('step-login');
+    }
+  },1200);
 } else {
-  goStep('step-firebase');
+  goStep('step-login');
 }
 </script>
 </body>
