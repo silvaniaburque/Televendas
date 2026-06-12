@@ -260,6 +260,24 @@
   </div>
 </div>
 
+<!-- ══ MODAL EDITAR CLIENTE ════════════════════════════════════ -->
+<div class="overlay hidden" id="modal-editar-cliente">
+  <div class="modal-box" style="max-width:420px;">
+    <div class="step-title">✏️ Editar Cliente</div>
+    <input type="hidden" id="ec-id" />
+    <div class="form-row"><label>Nome Fantasia</label><input type="text" id="ec-fantasia" placeholder="Ex: Mercado do João" /></div>
+    <div class="form-row"><label>Razão Social</label><input type="text" id="ec-razao" placeholder="Ex: João Silva Materiais Ltda" /></div>
+    <div class="form-row"><label>CNPJ</label><input type="text" id="ec-cnpj" placeholder="00.000.000/0000-00" /></div>
+    <div class="alert alert-amber" style="margin-top:0.5rem;">
+      Alterar os dados aqui atualiza apenas o <strong>cadastro do cliente</strong>. Os registros de ligações já feitos continuam com os dados que tinham na hora do lançamento.
+    </div>
+    <div style="display:flex;gap:8px;margin-top:1rem;">
+      <button class="btn btn-secondary btn-full" onclick="fecharModal('modal-editar-cliente')">Cancelar</button>
+      <button class="btn btn-primary btn-full" onclick="salvarEdicaoCliente()">Salvar</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══ MODAL ADMIN ═════════════════════════════════════════════ -->
 <div class="overlay hidden" id="modal-usuarios">
   <div class="modal-box" style="max-width:560px;">
@@ -271,6 +289,7 @@
     <!-- Tabs do modal -->
     <div class="tab-pills" style="margin-bottom:1.25rem;">
       <button class="tab-pill active" onclick="showAdminTab('atab-usuarios',this)">👥 Usuários</button>
+      <button class="tab-pill" onclick="showAdminTab('atab-clientes',this)">🏷️ Clientes</button>
       <button class="tab-pill" onclick="showAdminTab('atab-parcelas',this)">💳 Parcelas</button>
       <button class="tab-pill" onclick="showAdminTab('atab-filiais',this)">🏢 Filiais</button>
     </div>
@@ -297,6 +316,15 @@
       </div>
       <div class="card-title">Usuários cadastrados</div>
       <div id="lista-usuarios"><div class="empty">Carregando...</div></div>
+    </div>
+
+    <!-- ABA: CLIENTES -->
+    <div class="tab-content" id="atab-clientes">
+      <div class="form-row">
+        <input type="text" id="busca-cliente-admin" placeholder="Buscar por nome fantasia, razão social ou CNPJ..." oninput="renderListaClientes()" />
+      </div>
+      <div class="card-title" id="clientes-contador">Clientes cadastrados</div>
+      <div id="lista-clientes"><div class="empty">Carregando...</div></div>
     </div>
 
     <!-- ABA: PARCELAS -->
@@ -573,7 +601,10 @@ function iniciarListener() {
   );
   const qc=query(collection(db,'clientes'),orderBy('nomeFantasiaLower'));
   onSnapshot(qc,
-    snap=>{ allClientes=snap.docs.map(d=>({_id:d.id,...d.data()})); },
+    snap=>{ allClientes=snap.docs.map(d=>({_id:d.id,...d.data()}));
+      if(!document.getElementById('modal-usuarios').classList.contains('hidden') &&
+         document.getElementById('atab-clientes').classList.contains('active')) renderListaClientes();
+    },
     err=>{ console.error(err); }
   );
 }
@@ -680,6 +711,7 @@ window.abrirUsuarios = async () => {
   if(!usuarioAtual?.perms?.admin){ toast('Acesso restrito a administradores.','erro'); return; }
   await carregarUsuarios();
   renderListaUsuarios();
+  renderListaClientes();
   renderListaParcelas();
   renderListaFiliais();
   // Reset para aba usuários
@@ -1025,7 +1057,107 @@ window.salvarEdicao = async () => {
   } catch(e){ toast('Erro ao atualizar.','erro'); }
 };
 
-// ── PARCELAS & FILIAIS ────────────────────────────────────────
+// ── GERENCIAR CLIENTES (admin) ─────────────────────────────────
+function renderListaClientes() {
+  const el=document.getElementById('lista-clientes');
+  const cont=document.getElementById('clientes-contador');
+  if(!el) return;
+  const busca=(document.getElementById('busca-cliente-admin')?.value||'').trim().toLowerCase();
+  const buscaNum=busca.replace(/\D/g,'');
+
+  let lista=[...allClientes];
+  if(busca){
+    lista=lista.filter(c=>{
+      const f=(c.fantasia||'').toLowerCase();
+      const r=(c.razao||'').toLowerCase();
+      const cn=(c.cnpj||'').replace(/\D/g,'');
+      return f.includes(busca) || r.includes(busca) || (buscaNum && cn.includes(buscaNum));
+    });
+  }
+  lista.sort((a,b)=>(a.fantasia||a.razao||a.cnpj||'').localeCompare(b.fantasia||b.razao||b.cnpj||''));
+
+  if(cont) cont.textContent = `Clientes cadastrados (${lista.length})`;
+
+  if(!lista.length){ el.innerHTML='<div class="empty">Nenhum cliente encontrado.</div>'; return; }
+
+  el.innerHTML=lista.map(c=>{
+    const nome=c.fantasia||c.razao||c.cnpj||'—';
+    const detalhe=[c.razao&&c.razao!==c.fantasia?c.razao:null,c.cnpj].filter(Boolean).join(' · ');
+    const qtd=allRegistros.filter(r=>r.cliente && typeof r.cliente!=='string' &&
+      ((c.cnpj && r.cliente.cnpj && r.cliente.cnpj.replace(/\D/g,'')===c.cnpj.replace(/\D/g,'')) ||
+       (!c.cnpj && r.cliente.fantasia && r.cliente.fantasia.toLowerCase()===((c.fantasia||'').toLowerCase()) && c.fantasia) ||
+       (!c.cnpj && !c.fantasia && r.cliente.razao && r.cliente.razao.toLowerCase()===((c.razao||'').toLowerCase()) && c.razao))
+    ).length;
+    return `
+    <div class="user-card">
+      <div class="user-info">
+        <div class="user-name">${nome}</div>
+        <div class="user-meta">
+          ${detalhe?`<span>${detalhe}</span>`:''}
+          <span class="badge badge-gray">${qtd} registro${qtd===1?'':'s'}</span>
+        </div>
+      </div>
+      <div class="user-actions">
+        <button class="btn btn-secondary btn-sm" onclick="abrirEditarCliente('${c._id}')">✏️</button>
+        <button class="btn btn-danger btn-sm" onclick="removerCliente('${c._id}','${nome.replace(/'/g,"\\'")}')">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+window.abrirEditarCliente = id => {
+  const c=allClientes.find(x=>x._id===id);
+  if(!c) return;
+  document.getElementById('ec-id').value=c._id;
+  document.getElementById('ec-fantasia').value=c.fantasia||'';
+  document.getElementById('ec-razao').value=c.razao||'';
+  document.getElementById('ec-cnpj').value=c.cnpj||'';
+  document.getElementById('modal-editar-cliente').classList.remove('hidden');
+};
+
+window.salvarEdicaoCliente = async () => {
+  const id=document.getElementById('ec-id').value;
+  const fantasia=document.getElementById('ec-fantasia').value.trim();
+  const razao=document.getElementById('ec-razao').value.trim();
+  const cnpj=document.getElementById('ec-cnpj').value.trim();
+  if(!fantasia&&!razao&&!cnpj){ toast('Informe pelo menos um dado do cliente.','erro'); return; }
+  try {
+    await updateDoc(doc(db,'clientes',id),{
+      fantasia, razao, cnpj,
+      nomeFantasiaLower:(fantasia||razao||cnpj||'').toLowerCase()
+    });
+    const idx=allClientes.findIndex(c=>c._id===id);
+    if(idx>-1) allClientes[idx]={...allClientes[idx],fantasia,razao,cnpj};
+    fecharModal('modal-editar-cliente');
+    renderListaClientes();
+    toast('Cliente atualizado!');
+  } catch(e){ toast('Erro ao atualizar cliente.','erro'); }
+};
+
+window.removerCliente = async (id, nome) => {
+  const qtd=allRegistros.filter(r=>{
+    if(!r.cliente || typeof r.cliente==='string') return false;
+    const c=allClientes.find(x=>x._id===id);
+    if(!c) return false;
+    if(c.cnpj && r.cliente.cnpj) return r.cliente.cnpj.replace(/\D/g,'')===c.cnpj.replace(/\D/g,'');
+    if(c.fantasia && r.cliente.fantasia) return r.cliente.fantasia.toLowerCase()===c.fantasia.toLowerCase();
+    if(c.razao && r.cliente.razao) return r.cliente.razao.toLowerCase()===c.razao.toLowerCase();
+    return false;
+  }).length;
+
+  let msg=`Remover o cadastro de "${nome}"?`;
+  if(qtd>0) msg += `\n\nEle está vinculado a ${qtd} registro(s) de ligação. Os registros existentes NÃO serão excluídos, mas este cliente deixará de aparecer nas sugestões de autocomplete.`;
+  if(!confirm(msg)) return;
+
+  try {
+    await deleteDoc(doc(db,'clientes',id));
+    allClientes=allClientes.filter(c=>c._id!==id);
+    renderListaClientes();
+    toast('Cliente removido.');
+  } catch(e){ toast('Erro ao remover cliente.','erro'); }
+};
+
+
 const PARCELAS_PADRAO = ['À vista','1 (30)','2 (30/60)','2 (30/45)','3 (30/60/90)','4 (30/45/60/75)','5 (30/45/60/75/90)'];
 const FILIAIS_PADRAO  = ['Matriz','Rio','BBF','Outra'];
 
@@ -1120,6 +1252,7 @@ window.showAdminTab = (id,btn) => {
   document.querySelectorAll('#modal-usuarios .tab-pill').forEach(b=>b.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   btn.classList.add('active');
+  if(id==='atab-clientes') renderListaClientes();
   if(id==='atab-parcelas') renderListaParcelas();
   if(id==='atab-filiais')  renderListaFiliais();
 };
